@@ -65,7 +65,7 @@ func LoginPage(c *fiber.Ctx) error {
 	if sessionID != "" {
 		session, err := db.GetSession(sessionID)
 		if err == nil && session.ExpiresAt > time.Now().Unix() {
-			return c.Redirect("/")
+			return c.Redirect(BasePath + "/")
 		}
 	}
 	return c.Render("login", fiber.Map{
@@ -86,10 +86,10 @@ func Login(c *fiber.Ctx) error {
 		if loginLimiter != nil {
 			if loginLimiter.RecordAttempt(ip) {
 				// Limit exceeded, redirect with rate_limited error
-				return c.Redirect("/login?error=rate_limited")
+				return c.Redirect(BasePath + "/login?error=rate_limited")
 			}
 		}
-		return c.Redirect("/login?error=1")
+		return c.Redirect(BasePath + "/login?error=1")
 	}
 
 	// Successful login - reset attempts
@@ -115,10 +115,10 @@ func Login(c *fiber.Ctx) error {
 		HTTPOnly: true,
 		Secure:   isSecureConnection(c),
 		SameSite: "Lax",
-		Path:     "/",
+		Path:     CookiePath(),
 	})
 
-	return c.Redirect("/")
+	return c.Redirect(BasePath + "/")
 }
 
 // Logout handles logout
@@ -136,10 +136,10 @@ func Logout(c *fiber.Ctx) error {
 		HTTPOnly: true,
 		Secure:   isSecureConnection(c),
 		SameSite: "Lax",
-		Path:     "/",
+		Path:     CookiePath(),
 	})
 
-	return c.Redirect("/login")
+	return c.Redirect(BasePath + "/login")
 }
 
 // AuthMiddleware checks if user is authenticated
@@ -149,7 +149,7 @@ func AuthMiddleware(c *fiber.Ctx) error {
 	}
 
 	// Skip auth for login page and static files
-	path := c.Path()
+	path := StripBase(c.Path())
 	if path == "/login" || path == "/static" || len(path) > 7 && path[:8] == "/static/" {
 		return c.Next()
 	}
@@ -158,10 +158,10 @@ func AuthMiddleware(c *fiber.Ctx) error {
 	if sessionID == "" {
 		log.Printf("[AUTH] No session cookie for %s %s (HX-Request: %s)", c.Method(), path, c.Get("HX-Request"))
 		if c.Get("HX-Request") == "true" {
-			c.Set("HX-Redirect", "/login")
+			c.Set("HX-Redirect", BasePath+"/login")
 			return c.SendStatus(401)
 		}
-		return c.Redirect("/login")
+		return c.Redirect(BasePath + "/login")
 	}
 
 	session, err := db.GetSession(sessionID)
@@ -184,13 +184,13 @@ func AuthMiddleware(c *fiber.Ctx) error {
 			HTTPOnly: true,
 			Secure:   isSecureConnection(c),
 			SameSite: "Lax",
-			Path:     "/",
+			Path:     CookiePath(),
 		})
 		if c.Get("HX-Request") == "true" {
-			c.Set("HX-Redirect", "/login")
+			c.Set("HX-Redirect", BasePath+"/login")
 			return c.SendStatus(401)
 		}
-		return c.Redirect("/login")
+		return c.Redirect(BasePath + "/login")
 	}
 
 	if session.ExpiresAt < time.Now().Unix() {
@@ -203,13 +203,13 @@ func AuthMiddleware(c *fiber.Ctx) error {
 			HTTPOnly: true,
 			Secure:   isSecureConnection(c),
 			SameSite: "Lax",
-			Path:     "/",
+			Path:     CookiePath(),
 		})
 		if c.Get("HX-Request") == "true" {
-			c.Set("HX-Redirect", "/login")
+			c.Set("HX-Redirect", BasePath+"/login")
 			return c.SendStatus(401)
 		}
-		return c.Redirect("/login")
+		return c.Redirect(BasePath + "/login")
 	}
 
 	return c.Next()

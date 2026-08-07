@@ -42,6 +42,12 @@ func main() {
 		i18n.SetDefaultLang(lang)
 	}
 
+	// Determine the URL mount prefix (for hosting under a subfolder behind a proxy)
+	handlers.InitBasePath()
+	if handlers.BasePath != "" {
+		log.Printf("Mounting app under base path: %s", handlers.BasePath)
+	}
+
 	// Initialize database
 	db.Init()
 	defer db.Close()
@@ -125,7 +131,15 @@ func main() {
 			return template.JS(b)
 		},
 		"asset": func(path string) string {
-			return "/static/" + path + "?v=" + handlers.AssetHash
+			return handlers.BasePath + "/static/" + path + "?v=" + handlers.AssetHash
+		},
+		// url prefixes a root-absolute app path with the configured BasePath.
+		"url": func(path string) string {
+			return handlers.BasePath + path
+		},
+		// basePath exposes the mount prefix to templates (for window.BASE_PATH).
+		"basePath": func() string {
+			return handlers.BasePath
 		},
 	})
 
@@ -162,36 +176,50 @@ func main() {
 	}
 	handlers.ServiceWorkerBytes = swBytes
 
+	manifestBytes, err := handlers.BuildManifest(staticRootFS)
+	if err != nil {
+		log.Fatalf("Failed to build manifest: %v", err)
+	}
+	handlers.ManifestBytes = manifestBytes
+
+	// All routes are mounted under BasePath so the app can be served from a
+	// subfolder behind a reverse proxy. When BasePath is empty this is a no-op
+	// and everything is served from the root.
+	root := app.Group(handlers.BasePath)
+
 	// SW must be served by a dedicated handler (not the filesystem middleware)
 	// so placeholders get replaced and Cache-Control is no-cache instead of
 	// the 30-day max-age applied to other static assets.
-	app.Get("/static/sw.js", handlers.ServeServiceWorker)
+	root.Get("/static/sw.js", handlers.ServeServiceWorker)
 
-	app.Use("/static", filesystem.New(filesystem.Config{
+	// Manifest is served dynamically so its URLs can be rewritten for BasePath.
+	root.Get("/static/manifest.json", handlers.ServeManifest)
+
+	root.Use("/static", filesystem.New(filesystem.Config{
 		Root:   http.FS(staticRootFS),
 		Browse: false,
 		MaxAge: 86400 * 30, // 30 days - files are embedded and versioned at build time
 	}))
 
 	// Auth routes (before middleware)
-	app.Get("/login", handlers.LoginPage)
-	app.Post("/login", handlers.LoginRateLimitMiddleware, handlers.Login)
-	app.Post("/logout", handlers.Logout)
+	root.Get("/login", handlers.LoginPage)
+	root.Post("/login", handlers.LoginRateLimitMiddleware, handlers.Login)
+	root.Post("/logout", handlers.Logout)
 
 	// i18n API (before auth middleware - needed for login page)
-	app.Get("/locales", handlers.GetLocales)
+	root.Get("/locales", handlers.GetLocales)
 
 	// REST API (before auth middleware - uses token auth)
-	api.Register(app)
+	api.Register(root)
 
 	// Public endpoints (no auth required)
-	app.Get("/api/version", handlers.GetVersion)
+	root.Get("/api/version", handlers.GetVersion)
 
 	// Auth middleware for all other routes
-	app.Use(handlers.AuthMiddleware)
+	root.Use(handlers.AuthMiddleware)
 
 	// WebSocket upgrade middleware
-	app.Use("/ws", func(c *fiber.Ctx) error {
+	root.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
 			return c.Next()
@@ -200,88 +228,88 @@ func main() {
 	})
 
 	// WebSocket endpoint
-	app.Get("/ws", websocket.New(handlers.WebSocketHandler))
+	root.Get("/ws", websocket.New(handlers.WebSocketHandler))
 
 	// Main page - shows all lists
-	app.Get("/", handlers.GetListsPage)
+	root.Get("/", handlers.GetListsPage)
 
 	// Single list view - shows items
-	app.Get("/lists/:id", handlers.GetListView)
+	root.Get("/lists/:id", handlers.GetListView)
 
 	// Sections API
-	app.Get("/sections/list", handlers.GetSectionsListForModal)
-	app.Get("/sections/:id/html", handlers.GetSectionHTML)
-	app.Post("/sections", handlers.CreateSection)
-	app.Put("/sections/:id", handlers.UpdateSection)
-	app.Delete("/sections/:id", handlers.DeleteSection)
-	app.Post("/sections/:id/move-up", handlers.MoveSectionUp)
-	app.Post("/sections/:id/move-down", handlers.MoveSectionDown)
-	app.Post("/sections/:id/check-all", handlers.CheckAllItems)
-	app.Post("/sections/:id/uncheck-all", handlers.UncheckAllItems)
-	app.Post("/sections/:id/sort-mode", handlers.UpdateSectionSortMode)
+	root.Get("/sections/list", handlers.GetSectionsListForModal)
+	root.Get("/sections/:id/html", handlers.GetSectionHTML)
+	root.Post("/sections", handlers.CreateSection)
+	root.Put("/sections/:id", handlers.UpdateSection)
+	root.Delete("/sections/:id", handlers.DeleteSection)
+	root.Post("/sections/:id/move-up", handlers.MoveSectionUp)
+	root.Post("/sections/:id/move-down", handlers.MoveSectionDown)
+	root.Post("/sections/:id/check-all", handlers.CheckAllItems)
+	root.Post("/sections/:id/uncheck-all", handlers.UncheckAllItems)
+	root.Post("/sections/:id/sort-mode", handlers.UpdateSectionSortMode)
 
 	// Lists API
-	app.Get("/lists", handlers.GetLists)
-	app.Post("/lists", handlers.CreateList)
-	app.Put("/lists/:id", handlers.UpdateList)
-	app.Delete("/lists/:id", handlers.DeleteList)
-	app.Post("/lists/:id/activate", handlers.SetActiveList)
-	app.Get("/lists/:id/activate", handlers.SetActiveList)
-	app.Post("/lists/:id/move-up", handlers.MoveListUp)
-	app.Post("/lists/:id/move-down", handlers.MoveListDown)
-	app.Post("/lists/:id/toggle-completed", handlers.ToggleShowCompleted)
+	root.Get("/lists", handlers.GetLists)
+	root.Post("/lists", handlers.CreateList)
+	root.Put("/lists/:id", handlers.UpdateList)
+	root.Delete("/lists/:id", handlers.DeleteList)
+	root.Post("/lists/:id/activate", handlers.SetActiveList)
+	root.Get("/lists/:id/activate", handlers.SetActiveList)
+	root.Post("/lists/:id/move-up", handlers.MoveListUp)
+	root.Post("/lists/:id/move-down", handlers.MoveListDown)
+	root.Post("/lists/:id/toggle-completed", handlers.ToggleShowCompleted)
 
 	// Templates API
-	app.Get("/templates", handlers.GetTemplates)
-	app.Get("/templates/:id", handlers.GetTemplate)
-	app.Post("/templates", handlers.CreateTemplate)
-	app.Put("/templates/:id", handlers.UpdateTemplate)
-	app.Delete("/templates/:id", handlers.DeleteTemplate)
-	app.Post("/templates/:id/items", handlers.AddTemplateItem)
-	app.Put("/templates/:id/items/:itemId", handlers.UpdateTemplateItem)
-	app.Delete("/templates/:id/items/:itemId", handlers.DeleteTemplateItem)
-	app.Post("/templates/:id/apply", handlers.ApplyTemplate)
-	app.Post("/templates/from-list", handlers.CreateTemplateFromList)
+	root.Get("/templates", handlers.GetTemplates)
+	root.Get("/templates/:id", handlers.GetTemplate)
+	root.Post("/templates", handlers.CreateTemplate)
+	root.Put("/templates/:id", handlers.UpdateTemplate)
+	root.Delete("/templates/:id", handlers.DeleteTemplate)
+	root.Post("/templates/:id/items", handlers.AddTemplateItem)
+	root.Put("/templates/:id/items/:itemId", handlers.UpdateTemplateItem)
+	root.Delete("/templates/:id/items/:itemId", handlers.DeleteTemplateItem)
+	root.Post("/templates/:id/apply", handlers.ApplyTemplate)
+	root.Post("/templates/from-list", handlers.CreateTemplateFromList)
 
 	// Items API
-	app.Get("/items/:id/html", handlers.GetItemHTML)
-	app.Post("/items", handlers.CreateItem)
-	app.Post("/items/delete-completed", handlers.DeleteCompletedItems)
-	app.Put("/items/:id", handlers.UpdateItem)
-	app.Delete("/items/:id", handlers.DeleteItem)
-	app.Post("/items/:id/toggle", handlers.ToggleItem)
-	app.Post("/items/:id/quantity", handlers.AdjustItemQuantity)
-	app.Post("/items/:id/uncertain", handlers.ToggleUncertain)
-	app.Post("/items/:id/move", handlers.MoveItemToSection)
-	app.Post("/items/:id/move-up", handlers.MoveItemUp)
-	app.Post("/items/:id/move-down", handlers.MoveItemDown)
+	root.Get("/items/:id/html", handlers.GetItemHTML)
+	root.Post("/items", handlers.CreateItem)
+	root.Post("/items/delete-completed", handlers.DeleteCompletedItems)
+	root.Put("/items/:id", handlers.UpdateItem)
+	root.Delete("/items/:id", handlers.DeleteItem)
+	root.Post("/items/:id/toggle", handlers.ToggleItem)
+	root.Post("/items/:id/quantity", handlers.AdjustItemQuantity)
+	root.Post("/items/:id/uncertain", handlers.ToggleUncertain)
+	root.Post("/items/:id/move", handlers.MoveItemToSection)
+	root.Post("/items/:id/move-up", handlers.MoveItemUp)
+	root.Post("/items/:id/move-down", handlers.MoveItemDown)
 
 	// Stats API
-	app.Get("/stats", handlers.GetStats)
+	root.Get("/stats", handlers.GetStats)
 
 	// Offline data API
-	app.Get("/api/data", handlers.GetAllData)
-	app.Get("/api/item/:id/version", handlers.GetItemVersion)
-	app.Get("/api/suggestions", handlers.GetSuggestions)
+	root.Get("/api/data", handlers.GetAllData)
+	root.Get("/api/item/:id/version", handlers.GetItemVersion)
+	root.Get("/api/suggestions", handlers.GetSuggestions)
 
 	// History management API
-	app.Get("/api/history", handlers.GetHistory)
-	app.Delete("/api/history/:id", handlers.DeleteHistoryItem)
-	app.Post("/api/history/batch-delete", handlers.BatchDeleteHistory)
+	root.Get("/api/history", handlers.GetHistory)
+	root.Delete("/api/history/:id", handlers.DeleteHistoryItem)
+	root.Post("/api/history/batch-delete", handlers.BatchDeleteHistory)
 
 	// Batch operations
-	app.Post("/sections/batch-delete", handlers.BatchDeleteSections)
+	root.Post("/sections/batch-delete", handlers.BatchDeleteSections)
 
 	// Import/Export
-	app.Get("/export", handlers.ExportAllData)
-	app.Get("/export/list/:id", handlers.ExportSingleList)
-	app.Get("/export/preview", handlers.GetExportPreview)
-	app.Post("/import", handlers.ImportData)
-	app.Post("/import/preview", handlers.PreviewImport)
+	root.Get("/export", handlers.ExportAllData)
+	root.Get("/export/list/:id", handlers.ExportSingleList)
+	root.Get("/export/preview", handlers.GetExportPreview)
+	root.Post("/import", handlers.ImportData)
+	root.Post("/import/preview", handlers.PreviewImport)
 
 	// Database management
-	app.Get("/api/database/csrf-token", handlers.GenerateCSRFToken)
-	app.Post("/api/database/clear", handlers.ClearDatabase)
+	root.Get("/api/database/csrf-token", handlers.GenerateCSRFToken)
+	root.Post("/api/database/clear", handlers.ClearDatabase)
 
 	// Get port from env or default to 3000
 	port := os.Getenv("PORT")

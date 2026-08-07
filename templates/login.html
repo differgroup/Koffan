@@ -87,7 +87,7 @@
 <body class="bg-stone-50 dark:bg-stone-900 min-h-screen flex items-center justify-center px-4 transition-colors duration-200" x-data>
     <div class="bg-white dark:bg-stone-800 p-8 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm w-full max-w-sm">
         <div class="text-center mb-8">
-            <img src="/static/koffan-logo.webp" alt="Koffan Logo" class="h-16 mx-auto mb-4">
+            <img src="{{url "/static/koffan-logo.webp"}}" alt="Koffan Logo" class="h-16 mx-auto mb-4">
             <p class="text-sm text-stone-400 dark:text-stone-500 mt-1" x-text="t('login.subtitle')"></p>
         </div>
 
@@ -100,7 +100,7 @@
         </div>
         {{end}}
 
-        <form action="/login" method="POST">
+        <form action="{{url "/login"}}" method="POST">
             <div class="mb-6">
                 <label for="password" class="block text-stone-600 dark:text-stone-400 text-sm font-medium mb-2" x-text="t('login.password')">
                 </label>

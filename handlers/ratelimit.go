@@ -166,7 +166,7 @@ func LoginRateLimitMiddleware(c *fiber.Ctx) error {
 			minutes = 1
 		}
 		log.Printf("[RATE LIMIT] Blocked login attempt from IP: %s (remaining: %dm)", ip, minutes)
-		return c.Redirect("/login?error=rate_limited")
+		return c.Redirect(BasePath + "/login?error=rate_limited")
 	}
 
 	return c.Next()

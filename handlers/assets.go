@@ -55,7 +55,7 @@ func ComputeAssetHash(fsys fs.FS) (string, error) {
 }
 
 // BuildServiceWorker reads sw.js from fsys and replaces the placeholders
-// __CACHE_VERSION__ and __ASSET_HASH__ with hash.
+// __CACHE_VERSION__, __ASSET_HASH__ and __BASE_PATH__ with their values.
 func BuildServiceWorker(fsys fs.FS, hash string) ([]byte, error) {
 	raw, err := fs.ReadFile(fsys, "sw.js")
 	if err != nil {
@@ -63,7 +63,36 @@ func BuildServiceWorker(fsys fs.FS, hash string) ([]byte, error) {
 	}
 	out := bytes.ReplaceAll(raw, []byte("__CACHE_VERSION__"), []byte(hash))
 	out = bytes.ReplaceAll(out, []byte("__ASSET_HASH__"), []byte(hash))
+	out = bytes.ReplaceAll(out, []byte("__BASE_PATH__"), []byte(BasePath))
 	return out, nil
+}
+
+// ManifestBytes holds manifest.json with root-absolute URLs rewritten to
+// include BasePath. Built once at startup by BuildManifest.
+var ManifestBytes []byte
+
+// BuildManifest reads manifest.json from fsys and prefixes its root-absolute
+// URLs (start_url, icon sources) with BasePath, and adds a matching scope so
+// the installed PWA is scoped to the app's mount point.
+func BuildManifest(fsys fs.FS) ([]byte, error) {
+	raw, err := fs.ReadFile(fsys, "manifest.json")
+	if err != nil {
+		return nil, err
+	}
+	if BasePath == "" {
+		return raw, nil
+	}
+	out := bytes.ReplaceAll(raw, []byte(`"/static/`), []byte(`"`+BasePath+`/static/`))
+	out = bytes.ReplaceAll(out, []byte(`"start_url": "/"`), []byte(`"start_url": "`+BasePath+`/",
+  "scope": "`+BasePath+`/"`))
+	return out, nil
+}
+
+// ServeServiceWorker's manifest sibling: serves the pre-built ManifestBytes.
+func ServeManifest(c *fiber.Ctx) error {
+	c.Set("Content-Type", "application/manifest+json")
+	c.Set("Cache-Control", "no-cache")
+	return c.Send(ManifestBytes)
 }
 
 // ServeServiceWorker serves the pre-built ServiceWorkerBytes. SW must not be
@@ -75,6 +104,6 @@ func BuildServiceWorker(fsys fs.FS, hash string) ([]byte, error) {
 func ServeServiceWorker(c *fiber.Ctx) error {
 	c.Set("Content-Type", "application/javascript; charset=utf-8")
 	c.Set("Cache-Control", "no-cache")
-	c.Set("Service-Worker-Allowed", "/")
+	c.Set("Service-Worker-Allowed", CookiePath())
 	return c.Send(ServiceWorkerBytes)
 }

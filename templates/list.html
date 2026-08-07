@@ -8,8 +8,8 @@
             <div class="flex items-center justify-between h-14 mb-4 gap-3">
                 <!-- Logo and List Name -->
                 <div class="flex items-center gap-2 md:gap-3 overflow-hidden">
-                    <a href="/" class="hover:opacity-80 transition-opacity flex-shrink-0" :title="t('nav.back_to_lists')">
-                        <img src="/static/koffan-logo.webp" alt="Koffan Logo" class="app-logo-header">
+                    <a href="{{url "/"}}" class="hover:opacity-80 transition-opacity flex-shrink-0" :title="t('nav.back_to_lists')">
+                        <img src="{{url "/static/koffan-logo.webp"}}" alt="Koffan Logo" class="app-logo-header">
                     </a>
                     <span class="text-stone-300 dark:text-stone-600 text-sm md:text-base">/</span>
                     <div class="flex items-center gap-1.5 md:gap-2 overflow-hidden">
@@ -800,7 +800,7 @@
                 </div>
 
                 <!-- Logout -->
-                <form action="/logout" method="POST" class="mb-6">
+                <form action="{{url "/logout"}}" method="POST" class="mb-6">
                     <button type="submit"
                         class="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-600 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1091,7 +1091,7 @@
         <div class="py-2">
             {{range .Lists}}
             <a
-                href="/lists/{{.ID}}/activate"
+                href="{{url "/lists/"}}{{.ID}}/activate"
                 class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors {{if eq .ID $.List.ID}}bg-pink-50 dark:bg-pink-900/30{{end}}"
             >
                 <span class="text-lg">{{.Icon}}</span>

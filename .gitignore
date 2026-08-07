@@ -1,3 +1,7 @@
+.agents/
+.do/
+.github/
+
 # Binaries
 shopping-list
 *.exe

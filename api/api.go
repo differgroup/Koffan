@@ -7,7 +7,7 @@ import (
 )
 
 // Register conditionally registers the API routes if API_TOKEN is set
-func Register(app *fiber.App) {
+func Register(app fiber.Router) {
 	if !IsAPIEnabled() {
 		log.Println("REST API is disabled (API_TOKEN not set)")
 		// Register catch-all handler that returns 503 for all API requests

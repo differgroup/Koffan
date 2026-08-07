@@ -44,14 +44,14 @@ func GetListsPage(c *fiber.Ctx) error {
 func GetListView(c *fiber.Ctx) error {
 	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
 	if err != nil {
-		return c.Redirect("/")
+		return c.Redirect(BasePath + "/")
 	}
 
 	list, err := db.GetListByID(id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// List not found - redirect to home
-			return c.Redirect("/")
+			return c.Redirect(BasePath + "/")
 		}
 		// Database error - log and show error
 		log.Printf("Error fetching list %d: %v", id, err)
@@ -94,7 +94,7 @@ func GetLists(c *fiber.Ctx) error {
 	}
 
 	// For HTML, redirect to homepage
-	return c.Redirect("/")
+	return c.Redirect(BasePath + "/")
 }
 
 // CreateList creates a new shopping list
@@ -226,7 +226,7 @@ func SetActiveList(c *fiber.Ctx) error {
 	// Check if this is an AJAX request (HTMX or fetch)
 	isAjax := c.Get("HX-Request") != "" || c.Get("X-Requested-With") != ""
 	if !isAjax {
-		return c.Redirect(fmt.Sprintf("/lists/%d", id))
+		return c.Redirect(fmt.Sprintf("%s/lists/%d", BasePath, id))
 	}
 
 	// Check if this is from the lists management page or main page
@@ -235,7 +235,7 @@ func SetActiveList(c *fiber.Ctx) error {
 	isListsPage := strings.Contains(currentURL, "/lists") || strings.Contains(referer, "/lists")
 
 	if !isListsPage {
-		c.Set("HX-Redirect", fmt.Sprintf("/lists/%d", id))
+		c.Set("HX-Redirect", fmt.Sprintf("%s/lists/%d", BasePath, id))
 		return c.SendString("")
 	}
 

@@ -5,12 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Koffan Shopping List</title>
 
+    <!-- Base path support: when the app is hosted under a subfolder (BASE_PATH),
+         prefix all same-origin root-absolute fetch/XHR requests. Installed first
+         so it wraps requests made by htmx, app.js and offline-storage.js. -->
+    <script>
+        window.BASE_PATH = "{{basePath}}";
+        (function () {
+            var B = window.BASE_PATH;
+            if (!B) { window.withBase = function (u) { return u; }; return; }
+            function pre(u) {
+                if (typeof u !== 'string') return u;
+                if (u.charAt(0) !== '/' || u.charAt(1) === '/') return u;
+                if (u === B || u.indexOf(B + '/') === 0) return u;
+                return B + u;
+            }
+            window.withBase = pre;
+            var of = window.fetch;
+            if (of) {
+                window.fetch = function (input, init) {
+                    if (typeof input === 'string') input = pre(input);
+                    return of.call(this, input, init);
+                };
+            }
+            var oo = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function (method, url) {
+                if (typeof url === 'string') arguments[1] = pre(url);
+                return oo.apply(this, arguments);
+            };
+        })();
+    </script>
+
     <!-- Favicon & PWA -->
-    <link rel="icon" type="image/png" href="/static/favicon-96.png" sizes="96x96">
-    <link rel="icon" type="image/png" href="/static/icon-192.png" sizes="192x192">
-    <link rel="icon" href="/static/favicon.ico" sizes="48x48">
-    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-    <link rel="manifest" href="/static/manifest.json" crossorigin="use-credentials">
+    <link rel="icon" type="image/png" href="{{url "/static/favicon-96.png"}}" sizes="96x96">
+    <link rel="icon" type="image/png" href="{{url "/static/icon-192.png"}}" sizes="192x192">
+    <link rel="icon" href="{{url "/static/favicon.ico"}}" sizes="48x48">
+    <link rel="apple-touch-icon" href="{{url "/static/apple-touch-icon.png"}}">
+    <link rel="manifest" href="{{url "/static/manifest.json"}}" crossorigin="use-credentials">
     <meta name="theme-color" content="#f9a8d4">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
@@ -487,7 +517,7 @@
     <script>
         // Register Service Worker with update handling
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('{{asset "sw.js"}}', { scope: '/' })
+            navigator.serviceWorker.register('{{asset "sw.js"}}', { scope: '{{basePath}}/' })
                 .then(reg => {
                     console.log('[App] Service Worker registered:', reg.scope);
                     // Force update check
@@ -536,7 +566,7 @@
             // is not served offline to the next user of a shared device.
             document.addEventListener('submit', (e) => {
                 const form = e.target;
-                if (form.matches?.('form[action="/logout"]')) {
+                if (form.matches?.('form[action$="/logout"]')) {
                     navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_CACHE' });
                 }
             }, true);

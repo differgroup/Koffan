@@ -716,7 +716,7 @@ function shoppingList() {
             this.stopPingPong();
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            const wsUrl = `${protocol}//${window.location.host}${window.BASE_PATH || ''}/ws`;
 
             try {
                 this.ws = new WebSocket(wsUrl);
@@ -3337,7 +3337,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.body.addEventListener('htmx:responseError', function(event) {
         console.error('HTMX error:', event.detail);
         if (event.detail.xhr.status === 401) {
-            window.location.href = '/login';
+            window.location.href = (window.BASE_PATH || '') + '/login';
         }
     });
 

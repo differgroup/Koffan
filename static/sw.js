@@ -5,27 +5,32 @@ const CACHE_VERSION = 'koffan-__CACHE_VERSION__';
 const STATIC_CACHE = CACHE_VERSION + '-static';
 const DYNAMIC_CACHE = CACHE_VERSION + '-dynamic';
 
+// URL prefix the app is mounted under (e.g. "/koffan"). Empty when at root.
+// Replaced at serve time by handlers.BuildServiceWorker.
+const BASE_PATH = '__BASE_PATH__';
+const APP_ROOT = BASE_PATH + '/';
+
 // Pattern for list pages
-const LIST_PAGE_PATTERN = /^\/lists\/\d+$/;
+const LIST_PAGE_PATTERN = new RegExp('^' + BASE_PATH + '/lists/\\d+$');
 
 // Static assets to cache on install
 const STATIC_ASSETS = [
-    '/static/app.js?v=__ASSET_HASH__',
-    '/static/offline-storage.js?v=__ASSET_HASH__',
-    '/static/ui-scale.js?v=__ASSET_HASH__',
-    '/static/manifest.json',
-    '/static/koffan-logo.webp',
-    '/static/icon-192.png',
-    '/static/icon-512.png',
-    '/static/favicon.ico',
-    '/static/favicon-96.png',
-    '/static/apple-touch-icon.png',
-    '/static/tailwind.min.js?v=__ASSET_HASH__',
-    '/static/htmx.min.js?v=__ASSET_HASH__',
-    '/static/htmx-ws.js?v=__ASSET_HASH__',
-    '/static/alpine-collapse.min.js?v=__ASSET_HASH__',
-    '/static/alpine.min.js?v=__ASSET_HASH__',
-    '/static/sortable.min.js?v=__ASSET_HASH__'
+    BASE_PATH + '/static/app.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/offline-storage.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/ui-scale.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/manifest.json',
+    BASE_PATH + '/static/koffan-logo.webp',
+    BASE_PATH + '/static/icon-192.png',
+    BASE_PATH + '/static/icon-512.png',
+    BASE_PATH + '/static/favicon.ico',
+    BASE_PATH + '/static/favicon-96.png',
+    BASE_PATH + '/static/apple-touch-icon.png',
+    BASE_PATH + '/static/tailwind.min.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/htmx.min.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/htmx-ws.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/alpine-collapse.min.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/alpine.min.js?v=__ASSET_HASH__',
+    BASE_PATH + '/static/sortable.min.js?v=__ASSET_HASH__'
 ];
 
 // Install event - cache static assets and the app shell
@@ -44,11 +49,11 @@ self.addEventListener('install', (event) => {
             // Without this, launching offline hits the networkFirst fallback because
             // "/" is otherwise only cached lazily after a successful online load.
             caches.open(DYNAMIC_CACHE)
-                .then(cache => fetch('/', { credentials: 'same-origin' })
+                .then(cache => fetch(APP_ROOT, { credentials: 'same-origin' })
                     .then(response => {
                         // Skip login redirects and errors so we never cache a non-shell page.
                         if (response.ok && !response.redirected) {
-                            return cache.put('/', response);
+                            return cache.put(APP_ROOT, response);
                         }
                     })
                     .catch(err => console.warn('[SW] App shell precache failed:', err)))
@@ -87,7 +92,7 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
     // Skip WebSocket connections
-    if (url.pathname === '/ws') {
+    if (url.pathname === BASE_PATH + '/ws') {
         return;
     }
 
@@ -97,13 +102,13 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Skip API data endpoint - always fetch fresh when online
-    if (url.pathname === '/api/data') {
+    if (url.pathname === BASE_PATH + '/api/data') {
         event.respondWith(networkFirst(event.request));
         return;
     }
 
     // Static assets - Cache First
-    if (url.pathname.startsWith('/static/')) {
+    if (url.pathname.startsWith(BASE_PATH + '/static/')) {
         event.respondWith(cacheFirst(event.request));
         return;
     }
@@ -121,7 +126,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Stats and other API - Network First
-    if (url.pathname === '/stats' || url.pathname.startsWith('/sections/') || url.pathname.startsWith('/items/')) {
+    if (url.pathname === BASE_PATH + '/stats' || url.pathname.startsWith(BASE_PATH + '/sections/') || url.pathname.startsWith(BASE_PATH + '/items/')) {
         event.respondWith(networkFirst(event.request));
         return;
     }
@@ -176,7 +181,7 @@ async function networkFirst(request) {
         // Return offline fallback for HTML
         if (request.headers.get('accept')?.includes('text/html')) {
             // Try to return cached main page
-            const mainPage = await caches.match('/');
+            const mainPage = await caches.match(APP_ROOT);
             if (mainPage) {
                 return mainPage;
             }
@@ -208,7 +213,7 @@ async function listPageStrategy(request) {
         }
 
         // List not cached - show offline message
-        return new Response('<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#fafaf9"><div style="text-align:center"><h1 style="color:#78716c">Koffan Offline</h1><p style="color:#a8a29e">This list is not saved offline.</p><a href="/" style="color:#f472b6;text-decoration:none">Back to home page</a></div></body></html>', {
+        return new Response('<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#fafaf9"><div style="text-align:center"><h1 style="color:#78716c">Koffan Offline</h1><p style="color:#a8a29e">This list is not saved offline.</p><a href="' + APP_ROOT + '" style="color:#f472b6;text-decoration:none">Back to home page</a></div></body></html>', {
             headers: { 'Content-Type': 'text/html' }
         });
     }
